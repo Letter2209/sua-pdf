@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sửa PDF</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #eceae6; --panel: #fbfaf8; --ink: #1d1c1a; --muted: #6b6862; --line: #d9d5cf;
+    --accent: #1f5f8b; --accent-soft: #dcebf5; --ok: #2e7d4f; --warn: #b26b00; --bad: #b3261e;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  button { font: inherit; cursor: pointer; }
+
+  header {
+    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  .brand { font-weight: 650; letter-spacing: -0.01em; margin-right: 6px; }
+  .fname { color: var(--muted); max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .spacer { flex: 1; }
+  .btn {
+    border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px;
+    border-radius: var(--radius); transition: background .12s, border-color .12s;
+  }
+  .btn:hover:not(:disabled) { border-color: #b9b4ac; background: #f6f4f1; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover:not(:disabled) { background: #194f75; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: #fff; }
+  .seg button { border: 0; background: transparent; padding: 6px 12px; color: var(--muted); }
+  .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .zoom { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+  .zoom button { width: 28px; padding: 4px 0; }
+
+  main { padding: 24px 16px 80px; }
+  .pages { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .page { position: relative; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06); }
+  .page img { display: block; width: 100%; height: 100%; user-select: none; -webkit-user-drag: none; }
+  .page .num { position: absolute; left: -44px; top: 4px; color: var(--muted); font-size: 12px; }
+  .ptools { position: absolute; right: -46px; top: 0; display: flex; flex-direction: column; gap: 6px; }
+  .ptools button { width: 34px; height: 34px; border: 1px solid var(--line); background: #fff; border-radius: 8px; color: var(--muted); font-size: 17px; line-height: 1; padding: 0; }
+  .ptools button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .rotrow { display: flex; gap: 8px; align-items: center; }
+  .rotrow select { flex: 1; }
+  .overlay { position: absolute; inset: 0; }
+
+  .ln { position: absolute; border-radius: 2px; cursor: text; }
+  .ln:hover { background: rgba(31,95,139,.10); outline: 1px solid rgba(31,95,139,.45); }
+  .ln.na { cursor: not-allowed; }
+  .ln.na:hover { background: rgba(0,0,0,.04); outline: 1px dashed #aaa; }
+  .mode-image .ln { display: none; }
+  .im { position: absolute; outline: 1px dashed rgba(31,95,139,.0); }
+  .mode-image .im { outline-color: rgba(31,95,139,.55); cursor: crosshair; }
+  .mode-text .im { pointer-events: none; }
+  .sel { position: absolute; border: 2px solid var(--accent); background: rgba(31,95,139,.12); pointer-events: none; }
+
+  .editor { position: absolute; z-index: 10; }
+  .editor input {
+    width: 100%; border: 2px solid var(--accent); border-radius: 4px; padding: 1px 4px; background: #fff;
+    box-shadow: 0 6px 20px rgba(0,0,0,.18); outline: none; color: #000;
+  }
+  .editor .hint { margin-top: 4px; font-size: 12px; color: var(--muted); background: var(--panel); display: inline-block; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--line); }
+
+  .drop {
+    margin: 10vh auto 0; max-width: 560px; padding: 48px 28px; text-align: center; background: var(--panel);
+    border: 2px dashed #c4bfb7; border-radius: 14px;
+  }
+  .drop h1 { font-size: 22px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .drop p { color: var(--muted); margin: 6px 0 18px; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop ul { text-align: left; color: var(--muted); margin: 18px auto 0; max-width: 420px; padding-left: 18px; }
+
+  .toasts { position: fixed; right: 16px; top: 60px; display: flex; flex-direction: column; gap: 8px; z-index: 30; max-width: 420px; }
+  .toast { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 10px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
+  .toast.ok { border-left-color: var(--ok); } .toast.warn { border-left-color: var(--warn); } .toast.bad { border-left-color: var(--bad); }
+  .toast b { display: block; margin-bottom: 2px; }
+  .toast .row { color: var(--muted); font-size: 13px; }
+
+  .modal-back { position: fixed; inset: 0; background: rgba(20,18,15,.35); display: none; align-items: center; justify-content: center; z-index: 40; }
+  .modal-back.show { display: flex; }
+  .modal { background: var(--panel); border-radius: 12px; width: min(640px, 94vw); max-height: 90vh; overflow: auto; padding: 18px 20px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .modal h2 { font-size: 17px; margin: 0 0 10px; }
+  .modal p { margin: 6px 0; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .field { margin: 10px 0; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select, .field textarea { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: #fff; }
+  .field textarea { resize: vertical; min-height: 40px; line-height: 1.4; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .chk { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .chk input { width: auto; }
+  .prev { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 10px; }
+  .prev figure { margin: 0; }
+  .prev figcaption { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  .prev img { max-width: 100%; border: 1px solid var(--line); border-radius: 4px; image-rendering: pixelated; }
+  .note { font-size: 12.5px; color: var(--muted); }
+  .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 12px; background: #efece7; margin-right: 4px; }
+  .busy { position: fixed; top: 54px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 5px 12px; border-radius: 999px; font-size: 13px; display: none; z-index: 60; }
+  .busy.show { display: block; }
+  code.ch { background: #fde8e6; color: var(--bad); padding: 0 4px; border-radius: 3px; font-size: 15px; }
+</style>
+</head>
+<body class="mode-text">
+<header>
+  <span class="brand">Sửa PDF</span>
+  <span class="fname" id="fname"></span>
+  <button class="btn" id="btnOpen">Mở file…</button>
+  <input type="file" id="file" accept="application/pdf,.pdf" hidden>
+  <div class="spacer"></div>
+  <div class="seg" id="modeSeg">
+    <button data-mode="text" class="on" title="Bấm vào một dòng chữ để sửa">Sửa chữ</button>
+    <button data-mode="image" title="Kéo chọn vùng chữ trên ảnh để sửa">Sửa chữ trong ảnh</button>
+  </div>
+  <div class="zoom"><button class="btn" id="zOut">−</button><span id="zLbl">150%</span><button class="btn" id="zIn">+</button></div>
+  <button class="btn" id="btnRotAll" disabled title="Xoay tất cả các trang 90° theo chiều kim đồng hồ">⟳ Xoay tất cả</button>
+  <button class="btn" id="btnUndo" disabled title="Ctrl+Z">Hoàn tác</button>
+  <button class="btn primary" id="btnSave" disabled>Tải về PDF</button>
+</header>
+
+<main id="main">
+  <div class="drop" id="drop">
+    <h1>Kéo thả file PDF vào đây</h1>
+    <p>hoặc</p>
+    <button class="btn primary" id="btnOpen2">Chọn file PDF</button>
+    <ul>
+      <li><b>Sửa chữ:</b> bấm vào dòng chữ, gõ nội dung mới, nhấn Enter. Chữ mới dùng đúng font có sẵn trong file.</li>
+      <li><b>Sửa chữ trong ảnh:</b> kéo khung quanh chữ trên ảnh (ảnh chụp màn hình, bản scan).</li>
+      <li id="privacyNote">File chỉ được xử lý trên máy bạn.</li>
+    </ul>
+  </div>
+  <div class="pages" id="pages"></div>
+</main>
+
+<div class="busy" id="busy">Đang xử lý…</div>
+<div class="toasts" id="toasts"></div>
+
+<div class="modal-back" id="confirmBack">
+  <div class="modal">
+    <h2>Font gốc thiếu ký tự</h2>
+    <div id="confirmBody"></div>
+    <div class="actions">
+      <button class="btn" id="cfNo">Hủy, giữ nguyên</button>
+      <button class="btn primary" id="cfYes">Vẫn dùng font thay thế</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="imgBack">
+  <div class="modal">
+    <h2>Sửa chữ trong ảnh</h2>
+    <div class="prev"><figure><figcaption>Vùng đã chọn (đã xoay cho chữ đứng thẳng)</figcaption><img id="imCrop" alt=""></figure></div>
+    <div class="field">
+      <label for="imRot">Chiều chữ trong khung</label>
+      <div class="rotrow">
+        <select id="imRot">
+          <option value="auto">Tự động phát hiện</option>
+          <option value="0">Chữ nằm ngang bình thường</option>
+          <option value="90">Chữ đọc từ dưới lên (xoay phải 90°)</option>
+          <option value="270">Chữ đọc từ trên xuống (xoay trái 90°)</option>
+          <option value="180">Chữ lộn ngược (xoay 180°)</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="imOld">Chữ gốc trong khung <span id="ocrState" class="note"></span></label>
+      <textarea id="imOld" rows="2" placeholder="Mỗi dòng chữ trong ảnh gõ trên một dòng. Dùng để so khớp font."></textarea>
+    </div>
+    <div class="field">
+      <label for="imNew">Chữ mới <span class="note">· Enter để xuống dòng</span></label>
+      <textarea id="imNew" rows="2" placeholder="Nội dung thay thế, mỗi dòng một dòng"></textarea>
+    </div>
+    <div class="two">
+      <div class="field">
+        <label for="imFont">Font</label>
+        <select id="imFont"><option value="">Tự động chọn font giống nhất</option></select>
+      </div>
+      <div class="field">
+        <label for="imAlign">Canh chữ</label>
+        <select id="imAlign">
+          <option value="auto">Tự động (theo bản gốc)</option>
+          <option value="left">Trái</option><option value="center">Giữa</option><option value="right">Phải</option>
+        </select>
+      </div>
+    </div>
+    <label class="chk"><input type="checkbox" id="imFit" checked> Thu nhỏ chữ nếu dài hơn khung đã chọn</label>
+    <div id="imResult"></div>
+    <div class="actions">
+      <button class="btn" id="imCancel">Hủy</button>
+      <button class="btn" id="imPreview">Xem trước</button>
+      <button class="btn primary" id="imApply" disabled>Áp dụng</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const state = { sid: null, pages: [], zoom: 1.5, mode: "text", version: 0, items: {} };
+
+function busy(on, msg) { const b = $("#busy"); b.textContent = msg || "Đang xử lý…"; b.classList.toggle("show", !!on); }
+function toast(kind, title, rows = [], ms = 7000) {
+  const t = document.createElement("div");
+  t.className = "toast " + kind;
+  t.innerHTML = `<b></b>`;
+  t.querySelector("b").textContent = title;
+  rows.forEach(r => { const d = document.createElement("div"); d.className = "row"; d.textContent = r; t.appendChild(d); });
+  $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+async function api(path, opt = {}) {
+  const r = await fetch(`/api/${state.sid}${path}`, opt);
+  const ct = r.headers.get("content-type") || "";
+  const data = ct.includes("json") ? await r.json() : await r.blob();
+  if (!r.ok) throw new Error((data && data.error) || `Lỗi ${r.status}`);
+  return data;
+}
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+// ---------- mở file
+async function openFile(file) {
+  if (!file) return;
+  busy(true, "Đang mở file…");
+  try {
+    const fd = new FormData(); fd.append("file", file);
+    const r = await fetch("/api/open", { method: "POST", body: fd });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Không mở được file");
+    state.sid = j.sid; applyInfo(j);
+    $("#drop").style.display = "none";
+    buildPages();
+  } catch (e) { toast("bad", "Không mở được file", [e.message]); }
+  busy(false);
+}
+function applyInfo(j) {
+  state.pages = j.pages; state.version = j.version;
+  $("#fname").textContent = j.name;
+  $("#btnUndo").disabled = !j.can_undo;
+  $("#btnSave").disabled = false;
+  $("#btnRotAll").disabled = false;
+}
+$("#btnOpen").onclick = $("#btnOpen2").onclick = () => $("#file").click();
+
+// ---------- bản chạy trên máy chủ: báo rõ file đi đâu, giới hạn và cách có kết quả giống nhất
+fetch("/api/config").then(r => r.json()).then(c => {
+  if (!c.server) return;
+  const li = $("#privacyNote");
+  li.textContent = `Bản trên mạng: file được xử lý trên máy chủ, không lưu lại, tự xóa sau ${c.ttl_min} phút không dùng `
+    + `(tối đa ${c.max_mb} MB, ${c.max_pages} trang). Máy chủ chỉ có font miễn phí nên chữ trong ảnh có thể không giống `
+    + `hoàn toàn font gốc; muốn giống nhất và giữ file trên máy mình, `;
+  const a = document.createElement("a");
+  a.href = c.source_url; a.target = "_blank"; a.rel = "noopener"; a.textContent = "tải app về chạy trên máy";
+  li.appendChild(a); li.appendChild(document.createTextNode("."));
+}).catch(() => {});
+$("#file").onchange = e => openFile(e.target.files[0]);
+const drop = $("#drop");
+["dragover", "dragenter"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => document.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+document.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) openFile(f); });
+
+// ---------- trang
+let observer;
+function buildPages() {
+  const wrap = $("#pages"); wrap.innerHTML = ""; state.items = {};
+  observer && observer.disconnect();
+  observer = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) loadPage(+e.target.dataset.p); }), { rootMargin: "600px" });
+  state.pages.forEach((pg, i) => {
+    const d = document.createElement("div");
+    d.className = "page"; d.dataset.p = i;
+    d.style.width = pg.w * state.zoom + "px"; d.style.height = pg.h * state.zoom + "px";
+    d.innerHTML = `<span class="num">${i + 1}</span><img alt=""><div class="overlay"></div>
+      <div class="ptools"><button data-r="-90" title="Xoay trái 90°">⟲</button><button data-r="90" title="Xoay phải 90°">⟳</button></div>`;
+    d.querySelectorAll(".ptools button").forEach(b => b.onclick = ev => { ev.stopPropagation(); rotatePages(i, +b.dataset.r); });
+    wrap.appendChild(d); observer.observe(d);
+  });
+}
+async function loadPage(p, force) {
+  const d = $(`.page[data-p="${p}"]`); if (!d) return;
+  if (d.dataset.v == state.version && !force) return;
+  d.dataset.v = state.version;
+  const s = Math.min(4, state.zoom * (window.devicePixelRatio || 1));
+  d.querySelector("img").src = `/api/${state.sid}/page/${p}.png?s=${s.toFixed(2)}&v=${state.version}`;
+  try {
+    const it = await api(`/page/${p}/items`);
+    state.items[p] = it; drawOverlay(p);
+  } catch (e) { toast("bad", "Lỗi đọc trang " + (p + 1), [e.message]); }
+}
+function reloadVisible() {
+  document.querySelectorAll(".page").forEach(d => {
+    const r = d.getBoundingClientRect();
+    if (r.bottom > -800 && r.top < innerHeight + 800) loadPage(+d.dataset.p);
+  });
+}
+function drawOverlay(p) {
+  const d = $(`.page[data-p="${p}"]`), ov = d.querySelector(".overlay"), z = state.zoom, it = state.items[p];
+  ov.innerHTML = "";
+  it.images.forEach((im, k) => {
+    const e = document.createElement("div"); e.className = "im";
+    place(e, im.bbox, z); e.dataset.k = k; ov.appendChild(e);
+  });
+  it.lines.forEach(l => {
+    const e = document.createElement("div"); e.className = "ln" + (l.editable ? "" : " na");
+    place(e, l.bbox, z);
+    e.title = l.editable ? l.fonts.join(" · ") + ` · ${l.size}pt` : "Dòng này dùng loại font chưa hỗ trợ sửa";
+    if (l.editable) e.onclick = ev => { ev.stopPropagation(); openEditor(p, l); };
+    ov.appendChild(e);
+  });
+  ov.onmousedown = ev => startSelect(ev, p, ov);
+}
+function place(e, b, z) {
+  e.style.left = b[0] * z + "px"; e.style.top = b[1] * z + "px";
+  e.style.width = (b[2] - b[0]) * z + "px"; e.style.height = (b[3] - b[1]) * z + "px";
+}
+
+// ---------- sửa dòng chữ
+let editorEl = null;
+function closeEditor() { editorEl && editorEl.remove(); editorEl = null; }
+function openEditor(p, l) {
+  closeEditor();
+  const z = state.zoom, ov = $(`.page[data-p="${p}"] .overlay`);
+  const wrap = document.createElement("div"); wrap.className = "editor";
+  const w = Math.max((l.bbox[2] - l.bbox[0]) * z + 60, 200);
+  wrap.style.left = l.bbox[0] * z - 6 + "px"; wrap.style.top = l.bbox[1] * z - 6 + "px"; wrap.style.width = w + "px";
+  const serif = l.fonts.some(f => /times|roman|serif|cambria|georgia|century/i.test(f));
+  wrap.innerHTML = `<input spellcheck="false"><div class="hint">Enter: lưu · Esc: hủy</div>`;
+  const inp = wrap.querySelector("input");
+  inp.value = l.text.replace(/\s+$/, "");
+  const trail = l.text.slice(inp.value.length);
+  inp.style.fontSize = Math.max(12, l.size * z) + "px";
+  inp.style.fontFamily = serif ? '"Times New Roman", Times, serif' : 'Aptos, Calibri, "Segoe UI", Arial, sans-serif';
+  inp.onkeydown = ev => {
+    if (ev.key === "Escape") closeEditor();
+    if (ev.key === "Enter") { const v = inp.value + trail; closeEditor(); if (v !== l.text) saveLine(p, l, v, false); }
+  };
+  wrap.onmousedown = ev => ev.stopPropagation();
+  ov.appendChild(wrap); editorEl = wrap; inp.focus(); inp.select();
+}
+document.addEventListener("mousedown", () => closeEditor());
+
+async function saveLine(p, l, text, allow) {
+  busy(true, "Đang ghi chữ…");
+  try {
+    const r = await post("/edit", { page: p, line: l.id, text, allow_fallback: allow });
+    busy(false);
+    if (r.needs_confirm) return askFallback(p, l, text, r);
+    applyInfo(r); reloadVisible();
+    if (r.changed) {
+      const rows = r.fonts.map(f => `${f.font}: ${f.chars.replace(/ /g, "␣")}`);
+      if (Math.abs(r.width_delta) >= 0.5) rows.push(`Dòng ${r.width_delta > 0 ? "dài hơn" : "ngắn hơn"} bản gốc ${Math.abs(r.width_delta).toFixed(1)} pt`);
+      const kind = r.fallback_used ? "warn" : (r.fonts.some(f => /trên máy/.test(f.font)) ? "ok" : "ok");
+      toast(kind, r.fallback_used ? "Đã sửa, có dùng font thay thế" : "Đã sửa, giữ đúng font", rows);
+    }
+  } catch (e) { busy(false); toast("bad", "Không sửa được", [e.message], 10000); }
+}
+function askFallback(p, l, text, r) {
+  const chars = r.missing.map(c => `<code class="ch">${c === " " ? "␣" : c}</code>`).join(" ");
+  $("#confirmBody").innerHTML = `
+    <p>Font gốc <b>${r.font_goc}</b> trong file không có ký tự: ${chars}</p>
+    <p>Máy bạn cũng chưa có font <b>${r.font_goc.split(",")[0]}</b>, nên các ký tự này chỉ vẽ được bằng font thay thế <b>${r.font_thay_the}</b>. Hình chữ sẽ <b>hơi khác</b> bản gốc.</p>
+    <p class="note">Để giống y bản gốc: cài font ${r.font_goc.split(",")[0]} vào máy, hoặc chép file font (.ttf/.otf) vào thư mục <code>fonts</code> của ứng dụng, rồi sửa lại.</p>`;
+  $("#confirmBack").classList.add("show");
+  $("#cfNo").onclick = () => $("#confirmBack").classList.remove("show");
+  $("#cfYes").onclick = () => { $("#confirmBack").classList.remove("show"); saveLine(p, l, text, true); };
+}
+
+// ---------- sửa chữ trong ảnh
+let sel = null;
+function startSelect(ev, p, ov) {
+  if (state.mode !== "image" || ev.button !== 0) return;
+  const it = state.items[p], z = state.zoom, rect = ov.getBoundingClientRect();
+  const x0 = (ev.clientX - rect.left) / z, y0 = (ev.clientY - rect.top) / z;
+  const hit = it.images.find(im => im.editable && x0 >= im.bbox[0] && x0 <= im.bbox[2] && y0 >= im.bbox[1] && y0 <= im.bbox[3]);
+  if (!hit) return;
+  ev.preventDefault();
+  const box = document.createElement("div"); box.className = "sel"; ov.appendChild(box);
+  sel = { p, box, x0, y0, x1: x0, y1: y0 };
+  const move = e => {
+    sel.x1 = Math.min(Math.max((e.clientX - rect.left) / z, hit.bbox[0]), hit.bbox[2]);
+    sel.y1 = Math.min(Math.max((e.clientY - rect.top) / z, hit.bbox[1]), hit.bbox[3]);
+    place(box, norm(sel), z);
+  };
+  const up = () => {
+    removeEventListener("mousemove", move); removeEventListener("mouseup", up);
+    const b = norm(sel);
+    if ((b[2] - b[0]) * z < 6 || (b[3] - b[1]) * z < 6) { box.remove(); sel = null; return; }
+    openImagePanel(p, b);
+  };
+  addEventListener("mousemove", move); addEventListener("mouseup", up);
+}
+const norm = s => [Math.min(s.x0, s.x1), Math.min(s.y0, s.y1), Math.max(s.x0, s.x1), Math.max(s.y0, s.y1)];
+
+let ocrWorker = null, fontsLoaded = false;
+async function loadTesseract() {
+  if (window.Tesseract) return;
+  await new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+}
+async function getWorker() {
+  await loadTesseract();
+  if (!ocrWorker) {
+    ocrWorker = await Tesseract.createWorker("vie+eng");
+    await ocrWorker.setParameters({ tessedit_pageseg_mode: "6" });   // khối chữ, 1 hoặc nhiều dòng
+  }
+  return ocrWorker;
+}
+// xoay ảnh deg độ theo chiều kim đồng hồ
+async function rotateBlob(blob, deg) {
+  if (!deg) return blob;
+  const bmp = await createImageBitmap(blob);
+  const c = document.createElement("canvas"), swap = deg % 180 !== 0;
+  c.width = swap ? bmp.height : bmp.width; c.height = swap ? bmp.width : bmp.height;
+  const x = c.getContext("2d");
+  x.translate(c.width / 2, c.height / 2); x.rotate(deg * Math.PI / 180); x.drawImage(bmp, -bmp.width / 2, -bmp.height / 2);
+  return await new Promise(r => c.toBlob(r, "image/png"));
+}
+const cleanText = t => t.split(/\n+/).map(s => s.replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+// thử nhận dạng ở nhiều hướng, lấy hướng có độ tin cậy cao nhất
+async function ocrOriented(blob, forced, onStep) {
+  const bmp = await createImageBitmap(blob);
+  const tall = bmp.height > bmp.width * 1.3;
+  const order = forced != null ? [forced] : (tall ? [90, 270, 0, 180] : [0, 180, 90, 270]);
+  const w = await getWorker();
+  let best = null;
+  for (const deg of order) {
+    onStep && onStep(deg);
+    const b = await rotateBlob(blob, deg);
+    const { data } = await w.recognize(b);
+    const r = { deg, text: cleanText(data.text), conf: data.confidence || 0, blob: b };
+    if (!best || r.conf > best.conf) best = r;
+    if (forced == null && r.conf >= 75 && r.text.length > 1) break;
+  }
+  return best;
+}
+const rotLabel = d => ({ 0: "ngang", 90: "đọc từ dưới lên", 270: "đọc từ trên xuống", 180: "lộn ngược" })[d];
+
+async function openImagePanel(p, box) {
+  const panel = $("#imgBack"); panel.classList.add("show");
+  $("#imOld").value = ""; $("#imNew").value = ""; $("#imResult").innerHTML = ""; $("#imApply").disabled = true;
+  $("#imRot").value = "auto"; $("#imAlign").value = "auto";
+  if (!fontsLoaded) {
+    try { (await api("/fonts")).forEach(f => { const o = document.createElement("option"); o.value = o.textContent = f; $("#imFont").appendChild(o); }); fontsLoaded = true; } catch (e) {}
+  }
+  const close = () => { panel.classList.remove("show"); sel && sel.box.remove(); sel = null; };
+  $("#imCancel").onclick = close;
+  let blob, ocrBlob, textRot = 0;
+  try {
+    [blob, ocrBlob] = await Promise.all([post("/image/crop", { page: p, box }), post("/image/ocrsrc", { page: p, box })]);
+  } catch (e) { toast("bad", "Không đọc được ảnh", [e.message]); return close(); }
+  const showCrop = async deg => { $("#imCrop").src = URL.createObjectURL(await rotateBlob(blob, deg)); };
+  await showCrop(0);
+  const runOCR = async forced => {
+    $("#ocrState").textContent = "· đang nhận dạng chữ…";
+    try {
+      const best = await ocrOriented(ocrBlob, forced, deg => { $("#ocrState").textContent = `· đang thử chiều ${rotLabel(deg)}…`; });
+      textRot = best.deg; await showCrop(textRot);
+      if (forced == null) $("#imRot").options[0].textContent = `Tự động: ${rotLabel(textRot)}`;
+      $("#imOld").value = best.text; $("#imNew").value = best.text;
+      $("#ocrState").textContent = `· nhận dạng tự động (tin cậy ${Math.round(best.conf)}%), hãy kiểm tra lại`;
+      $("#imResult").innerHTML = ""; $("#imApply").disabled = true;
+    } catch (e) {
+      $("#ocrState").textContent = "· không tải được bộ nhận dạng chữ (cần internet), hãy tự gõ và chọn chiều chữ";
+    }
+  };
+  $("#imRot").onchange = async () => {
+    const v = $("#imRot").value;
+    if (v === "auto") return runOCR(null);
+    textRot = +v; await showCrop(textRot);
+    $("#imResult").innerHTML = ""; $("#imApply").disabled = true;
+    if (window.Tesseract || ocrWorker) runOCR(textRot);
+  };
+  runOCR(null);
+  const body = commit => ({ page: p, box, old_text: $("#imOld").value, new_text: $("#imNew").value,
+                            font: $("#imFont").value, text_rot: textRot, align: $("#imAlign").value,
+                            fit: $("#imFit").checked, commit });
+  $("#imPreview").onclick = async () => {
+    busy(true, "Đang so khớp font…");
+    try {
+      const r = await post("/image/edit", body(false));
+      const m = r.match || {};
+      $("#imResult").innerHTML = `
+        <div class="prev">
+          <figure><figcaption>Trước</figcaption><img src="${r.before}"></figure>
+          <figure><figcaption>Sau</figcaption><img src="${r.after}"></figure>
+        </div>
+        <p class="note" style="margin-top:8px">
+          ${(m.lines || []).map((l, i) => `<span class="chip">Dòng ${i + 1}: ${l.font} · ${l.size}px${l.sx && Math.abs(l.sx - 1) > 0.03 ? " · bề ngang " + Math.round(l.sx * 100) + "%" : ""}${l.score != null ? " · giống " + l.score + "%" : ""}</span>`).join("")}
+          <span class="chip">${r.n_lines} dòng · canh ${({ left: "trái", center: "giữa", right: "phải" })[r.align]}</span>
+          <span class="chip">Chữ <span style="color:${r.text_color}">■</span> ${r.text_color}</span>
+          <span class="chip">Nền <span style="color:${r.bg_color}">■</span> ${r.bg_color}${r.bg_uniform ? "" : " (vá nền)"}</span>
+        </p>
+        ${m.alternatives && m.alternatives.length ? `<p class="note">Font gần giống khác: ${m.alternatives.join(", ")}</p>` : ""}
+        ${m.score == null ? `<p class="note">${$("#imOld").value.trim() ? "Không so khớp được font: kiểm tra lại chữ gốc (đúng từng dòng) và chiều chữ." : "Không có chữ gốc để so khớp nên font chỉ là ước lượng."}</p>` : ""}
+        ${(r.notes || []).map(n => `<p class="note">${n}</p>`).join("")}
+        ${m.score != null && m.score < 60 ? `<p class="note">Độ giống thấp: kiểm tra lại chữ gốc và chiều chữ.</p>` : ""}
+        ${r.shared ? `<p class="note">Ảnh này xuất hiện nhiều chỗ trong file, tất cả sẽ đổi theo.</p>` : ""}`;
+      $("#imApply").disabled = false;
+    } catch (e) { toast("bad", "Không xem trước được", [e.message]); }
+    busy(false);
+  };
+  $("#imApply").onclick = async () => {
+    busy(true, "Đang ghi vào ảnh…");
+    try {
+      const r = await post("/image/edit", body(true));
+      applyInfo(r); close(); reloadVisible();
+      toast("ok", "Đã sửa chữ trong ảnh", [`Font: ${r.match.font}${r.match.score != null ? " (giống " + r.match.score + "%)" : ""}`]);
+    } catch (e) { toast("bad", "Không sửa được", [e.message]); }
+    busy(false);
+  };
+}
+
+// ---------- xoay trang
+async function rotatePages(page, delta) {
+  busy(true, "Đang xoay trang…");
+  try {
+    const r = await post("/rotate", { page, delta });
+    applyInfo(r); buildPages();
+    if (page !== "all") { const d = $(`.page[data-p="${page}"]`); d && d.scrollIntoView({ block: "start" }); scrollBy(0, -70); }
+    toast("", page === "all" ? "Đã xoay tất cả trang" : `Đã xoay trang ${page + 1}`, ["Hướng mới được lưu khi tải PDF về. Bấm Hoàn tác để bỏ."], 4000);
+  } catch (e) { toast("bad", "Không xoay được", [e.message]); }
+  busy(false);
+}
+$("#btnRotAll").onclick = () => rotatePages("all", 90);
+
+// ---------- thanh công cụ
+$("#modeSeg").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.mode = b.dataset.mode;
+  document.querySelectorAll("#modeSeg button").forEach(x => x.classList.toggle("on", x === b));
+  document.body.className = "mode-" + state.mode;
+  closeEditor();
+  if (state.mode === "image") { toast("", "Sửa chữ trong ảnh", ["Kéo khung quanh dòng chữ trên ảnh (khung xanh nét đứt)."], 5000); loadTesseract().catch(() => {}); }
+};
+function setZoom(z) {
+  state.zoom = Math.min(3, Math.max(0.5, z)); $("#zLbl").textContent = Math.round(state.zoom * 100) + "%";
+  if (state.sid) { buildPages(); }
+}
+$("#zIn").onclick = () => setZoom(state.zoom + 0.25);
+$("#zOut").onclick = () => setZoom(state.zoom - 0.25);
+async function undo() {
+  if (!state.sid) return;
+  busy(true);
+  try { const r = await post("/undo", {}); applyInfo(r); if (r.ok) { reloadVisible(); toast("", "Đã hoàn tác"); } }
+  catch (e) { toast("bad", "Lỗi", [e.message]); }
+  busy(false);
+}
+$("#btnUndo").onclick = undo;
+$("#btnSave").onclick = () => { if (state.sid) location.href = `/api/${state.sid}/download`; };
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !editorEl && document.activeElement.tagName !== "INPUT") { e.preventDefault(); undo(); }
+});
+</script>
+</body>
+</html>

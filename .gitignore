@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.font_index.json
+debug/
+# font người dùng tự thêm (có thể có bản quyền) — không đưa lên mạng
+fonts/*
+!fonts/DOC_TOI.txt
+*.pdf
+.venv/
+venv/
